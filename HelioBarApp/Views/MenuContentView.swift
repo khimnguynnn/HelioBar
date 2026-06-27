@@ -30,6 +30,10 @@ struct MenuContentView: View {
                 status: store.hrStatus
             )
             StatusBadge(status: store.hrStatus)
+            DeviceHint(connectedName: store.connectedDevice?.name,
+                       rememberedName: store.rememberedDeviceName,
+                       needsChoice: store.needsDeviceChoice,
+                       onTap: onSettings)
 
             card(title: "Last 2 min") {
                 HRSparkline(values: store.recent).frame(height: 46)
