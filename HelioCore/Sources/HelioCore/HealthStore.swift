@@ -11,6 +11,12 @@ public final class HealthStore {
     public var batteryEstimate: BatteryEstimate = .calibrating
     public var maxHR: Int = 190
 
+    // Device selection (fed by AppModel from the BLE monitor)
+    public var discoveredDevices: [DiscoveredDevice] = []
+    public var connectedDevice: DiscoveredDevice?
+    public var rememberedDeviceName: String?
+    public var needsDeviceChoice: Bool = false
+
     // Session analytics
     public private(set) var recent: [Int] = []          // for sparkline
     public private(set) var sessionMin: Int?

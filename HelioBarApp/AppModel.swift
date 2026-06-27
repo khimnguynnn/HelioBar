@@ -2,7 +2,8 @@ import Foundation
 import UserNotifications
 import HelioCore
 
-/// Owns the BLE monitor, applies user prefs, and fires elevated-HR alerts.
+/// Owns the BLE monitor, applies user prefs, fires alerts, and mediates
+/// device selection between the monitor and the UI-facing HealthStore.
 @MainActor
 @Observable
 final class AppModel {
@@ -16,7 +17,13 @@ final class AppModel {
         guard !started else { return }
         started = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
+        let d = UserDefaults.standard
+        let rememberedID = d.string(forKey: "selectedDeviceID").flatMap(UUID.init(uuidString:))
+        store.rememberedDeviceName = d.string(forKey: "selectedDeviceName")
+
         monitor = HeartRateMonitor(
+            rememberedID: rememberedID,
             onSample: { [weak self] sample in
                 Task { @MainActor in self?.handle(bpm: sample.bpm) }
             },
@@ -28,7 +35,40 @@ final class AppModel {
             },
             onUnavailable: { [weak self] message in
                 Task { @MainActor in self?.store.hrFailed(message) }
+            },
+            onDeviceEvent: { [weak self] event in
+                Task { @MainActor in self?.handleDeviceEvent(event) }
             })
+    }
+
+    // MARK: - Device actions (called from SettingsView)
+
+    func selectDevice(_ id: UUID) { monitor?.select(deviceID: id) }
+    func forgetDevice() { monitor?.forget() }
+    func rescanDevices() { monitor?.rescan() }
+    func stopDeviceScan() { monitor?.stopDeviceScan() }
+
+    // MARK: - Event handling
+
+    private func handleDeviceEvent(_ event: DeviceEvent) {
+        switch event {
+        case .devicesChanged(let list):
+            store.discoveredDevices = list
+        case .connected(let dev):
+            store.connectedDevice = dev
+        case .needsChoice(let needs):
+            store.needsDeviceChoice = needs
+        case .remembered(let dev):
+            store.rememberedDeviceName = dev?.name
+            let d = UserDefaults.standard
+            if let dev {
+                d.set(dev.id.uuidString, forKey: "selectedDeviceID")
+                d.set(dev.name, forKey: "selectedDeviceName")
+            } else {
+                d.removeObject(forKey: "selectedDeviceID")
+                d.removeObject(forKey: "selectedDeviceName")
+            }
+        }
     }
 
     private func handle(bpm: Int) {
