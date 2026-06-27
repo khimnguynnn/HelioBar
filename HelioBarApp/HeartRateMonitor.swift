@@ -8,6 +8,7 @@ import HelioCore
 ///
 /// All state is touched on the main thread: CoreBluetooth is created with
 /// `queue: nil` (main queue) and the settle Timer fires on the main run loop.
+// INVARIANT: every stored property is touched on the main thread only (CoreBluetooth queue: nil + main-run-loop Timer). Do not call into this type off-main.
 final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate, @unchecked Sendable {
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
@@ -142,10 +143,13 @@ final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     private func pruneStale() {
         let cutoff = Date().addingTimeInterval(-staleAfter)
+        var removed = false
         for (id, dev) in discovered where dev.lastSeen < cutoff {
             discovered[id] = nil
             peripherals[id] = nil
+            removed = true
         }
+        if removed { onDeviceEvent(.devicesChanged(sortedDevices())) }
     }
 
     private func sortedDevices() -> [DiscoveredDevice] {
@@ -181,6 +185,7 @@ final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         onConnected(true)
+        onDeviceEvent(.needsChoice(false))
         let dev = discovered[peripheral.identifier]
             ?? DiscoveredDevice(id: peripheral.identifier,
                                 name: peripheral.name ?? "Helio Strap",
@@ -191,18 +196,18 @@ final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     func centralManager(_ central: CBCentralManager,
                         didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        guard peripheral.identifier == self.peripheral?.identifier else { return }   // ignore a failure for a device we've moved off of
         self.peripheral = nil
         onConnected(false)
-        guard engine.rememberedID != nil else { return }
         connectToRemembered()
     }
 
     func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        guard peripheral.identifier == self.peripheral?.identifier else { return }   // ignore stale (e.g. just-switched-away) device
         self.peripheral = nil
         onConnected(false)
         onDeviceEvent(.connected(nil))
-        guard engine.rememberedID != nil else { return }   // forget() already restarts scanning
         connectToRemembered()
     }
 
