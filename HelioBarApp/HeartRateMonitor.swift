@@ -55,7 +55,8 @@ final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDe
         engine.rememberedID = deviceID
         onDeviceEvent(.remembered(discovered[deviceID]))
         onDeviceEvent(.needsChoice(false))
-        if let p = peripheral, p.identifier != deviceID {
+        if peripheral?.identifier == deviceID { return }   // already on it; selection persisted above
+        if let p = peripheral {
             central.cancelPeripheralConnection(p)
             peripheral = nil
             onDeviceEvent(.connected(nil))
@@ -190,14 +191,18 @@ final class HeartRateMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDe
 
     func centralManager(_ central: CBCentralManager,
                         didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        self.peripheral = nil
         onConnected(false)
+        guard engine.rememberedID != nil else { return }
         connectToRemembered()
     }
 
     func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        self.peripheral = nil
         onConnected(false)
         onDeviceEvent(.connected(nil))
+        guard engine.rememberedID != nil else { return }   // forget() already restarts scanning
         connectToRemembered()
     }
 
