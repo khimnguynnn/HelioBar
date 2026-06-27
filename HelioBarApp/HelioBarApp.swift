@@ -73,12 +73,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if settingsWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 330, height: 400),
+                contentRect: NSRect(x: 0, y: 0, width: 330, height: 480),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false)
             window.title = "HelioBar Settings"
-            window.contentViewController = NSHostingController(rootView: SettingsView())
+            window.contentViewController = NSHostingController(rootView: SettingsView(model: model))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
