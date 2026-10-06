@@ -43,6 +43,7 @@ public struct AppStressStats: Sendable {
     public let maxHR: Int
     public let timeInElevated: TimeInterval  // seconds in elevated/high zone
     public let elevatedRatio: Double         // 0.0 - 1.0
+    public let deltaFromBaseline: Double     // e.g., +14.2 means 14 bpm above resting baseline
 }
 
 /// For timeline visualization
@@ -197,9 +198,15 @@ Pure functions, no state:
 
 ```swift
 public struct StressAnalyzer {
-    /// Rank apps by time in elevated/high zone
-    public static func rankByStress(
+    /// Compute resting baseline HR from samples
+    public static func computeBaseline(
         samples: [ActivitySample]
+    ) -> Double?
+    
+    /// Rank apps by delta from baseline (most stress-inducing first)
+    public static func rankByStress(
+        samples: [ActivitySample],
+        baseline: Double? = nil  // auto-computed if nil
     ) -> [AppStressStats]
     
     /// Build timeline segments, merging consecutive same-app samples
@@ -221,15 +228,31 @@ public struct StressAnalyzer {
 }
 ```
 
+### Baseline Calculation
+
+Baseline = average HR across all samples where `hrZone == .resting`. This represents user's typical calm state while working.
+
+```swift
+public static func computeBaseline(samples: [ActivitySample]) -> Double? {
+    let restingSamples = samples.filter { $0.hrZone == .resting }
+    guard !restingSamples.isEmpty else { return nil }
+    return Double(restingSamples.map(\.hr).reduce(0, +)) / Double(restingSamples.count)
+}
+```
+
+If no resting samples exist (user always elevated), fallback to overall average minus 10 bpm as rough estimate.
+
 ### Ranking Algorithm
 
-1. Group samples by `bundleID`
-2. For each app:
+1. Compute baseline from all samples
+2. Group samples by `bundleID`
+3. For each app:
    - Count total samples
    - Count samples where `hrZone != .resting`
    - Compute `elevatedRatio = elevatedSamples / totalSamples`
    - Compute `avgHR`, `maxHR`, `timeInElevated` (samples × 15s)
-3. Sort by `timeInElevated` descending
+   - Compute `deltaFromBaseline = avgHR - baseline`
+4. Sort by `deltaFromBaseline` descending (apps that raise HR most)
 
 ### Timeline Merging
 
@@ -292,10 +315,12 @@ Separate `NSWindow` with SwiftUI content. Opens from popover summary row tap or 
 │  Apps by Stress              This Week vs Last │
 │  ┌──────────────────┐       ┌────────────────┐ │
 │  │ StressRankingList│       │ ComparisonCard │ │
-│  │ 1. Slack    45%  │       │ Slack   ↑ 12%  │ │
-│  │ 2. Zoom     38%  │       │ Zoom    ↓  5%  │ │
-│  │ 3. VSCode   12%  │       │ VSCode  ━  0%  │ │
+│  │ 1. Slack   +18bpm│       │ Slack   ↑ 12%  │ │
+│  │ 2. Zoom    +12bpm│       │ Zoom    ↓  5%  │ │
+│  │ 3. VSCode   +3bpm│       │ VSCode  ━  0%  │ │
 │  └──────────────────┘       └────────────────┘ │
+│                                                 │
+│  Baseline: 68 bpm (your resting average)       │
 │                                                 │
 │  [Export CSV]              [Clear Data...]     │
 └─────────────────────────────────────────────────┘
