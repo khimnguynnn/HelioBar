@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import UniformTypeIdentifiers
 import UserNotifications
 import HelioCore
 
@@ -73,6 +75,22 @@ final class AppModel {
                     queue: .main
                 ) { [weak self] _ in
                     Task { await self?.activityStore?.deleteAll() }
+                }
+
+                NotificationCenter.default.addObserver(
+                    forName: .exportActivityData,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let store = self?.activityStore,
+                              let tempURL = await store.exportCSV(from: .distantPast, to: Date()) else { return }
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = "heliobar-activity.csv"
+                        panel.allowedContentTypes = [.commaSeparatedText]
+                        guard panel.runModal() == .OK, let dest = panel.url else { return }
+                        try? FileManager.default.copyItem(at: tempURL, to: dest)
+                    }
                 }
             } catch {
                 print("Failed to initialize ActivityStore: \(error)")
