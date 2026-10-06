@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import HelioCore
 
 @main
@@ -42,10 +43,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                       updater: model.updateChecker,
                                       onSettings: { [weak self] in self?.openSettings() }))
 
+        registerBreatheAction()
+
         titleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateTitle() }
         }
         updateTitle()
+    }
+
+    /// Adds a "Breathe now" button to the elevated-HR alert and routes taps
+    /// back here so the popover can open straight into the breathing exercise.
+    private func registerBreatheAction() {
+        let breathe = UNNotificationAction(
+            identifier: AppModel.breatheActionID,
+            title: "Breathe now",
+            options: [.foreground])
+        let category = UNNotificationCategory(
+            identifier: AppModel.elevatedHRCategoryID,
+            actions: [breathe],
+            intentIdentifiers: [],
+            options: [])
+        let center = UNUserNotificationCenter.current()
+        center.setNotificationCategories([category])
+        center.delegate = self
+    }
+
+    /// Open the popover (if needed) and start the breathing exercise inside it.
+    private func startBreathing() {
+        if let button = statusItem.button, !popover.isShown {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .startBreathing, object: nil)
     }
 
     private func updateTitle() {
@@ -97,5 +127,23 @@ extension AppDelegate: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // Back to menu-bar-only once Settings closes: no lingering Dock icon.
         NSApp.setActivationPolicy(.accessory)
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let isElevatedHR = response.notification.request.content.categoryIdentifier
+            == AppModel.elevatedHRCategoryID
+        let action = response.actionIdentifier
+        let wantsBreathing = isElevatedHR
+            && (action == AppModel.breatheActionID || action == UNNotificationDefaultActionIdentifier)
+        if wantsBreathing {
+            Task { @MainActor in self.startBreathing() }
+        }
+        completionHandler()
     }
 }

@@ -8,6 +8,9 @@ import HelioCore
 @MainActor
 @Observable
 final class AppModel {
+    nonisolated static let elevatedHRCategoryID = "elevatedHR"
+    nonisolated static let breatheActionID = "breathe"
+
     let store = HealthStore()
     let updateChecker = UpdateChecker()
     private var monitor: HeartRateMonitor?
@@ -135,8 +138,9 @@ final class AppModel {
     private func fireAlert(_ bpm: Int) {
         let c = UNMutableNotificationContent()
         c.title = "Heart rate elevated"
-        c.body = "\(bpm) bpm for a while — take a breath."
+        c.body = "\(bpm) bpm for a while — time to pause."
         c.sound = .default
+        c.categoryIdentifier = AppModel.elevatedHRCategoryID
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
     }

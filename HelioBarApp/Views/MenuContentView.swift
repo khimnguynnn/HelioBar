@@ -22,6 +22,9 @@ struct MenuContentView: View {
         .padding(Theme.lg)
         .frame(width: 300)
         .background(.black.opacity(0.001))   // ensures the hosting view fills the popover
+        .onReceive(NotificationCenter.default.publisher(for: .startBreathing)) { _ in
+            breathing = true
+        }
     }
 
     private var main: some View {
