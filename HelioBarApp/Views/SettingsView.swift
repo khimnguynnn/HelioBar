@@ -129,4 +129,5 @@ extension Notification.Name {
     static let openInsightsWindow = Notification.Name("openInsightsWindow")
     static let exportActivityData = Notification.Name("exportActivityData")
     static let deleteActivityData = Notification.Name("deleteActivityData")
+    static let startBreathing = Notification.Name("startBreathing")
 }
