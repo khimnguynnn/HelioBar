@@ -17,7 +17,7 @@ struct HelioBarApp: App {
 /// unlike SwiftUI's MenuBarExtra (which goes unresponsive after the Mac wakes).
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let model = AppModel()
+    let model = AppModel()
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var titleTimer: Timer?
@@ -53,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let store = model.store
         button.image = MenuBarIcon.image(bpm: store.liveHR,
                                          zone: store.hrZone,
-                                         status: store.hrStatus)
+                                         status: store.hrStatus,
+                                         isTracking: model.isActivityTracking)
     }
 
     @objc private func togglePopover(_ sender: Any?) {

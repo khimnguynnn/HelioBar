@@ -13,6 +13,14 @@ final class AppModel {
     private let batteryAlertEngine = BatteryAlertEngine()
     private var started = false
 
+    private(set) var activityStore: ActivityStore?
+    private var activityTracker: ActivityTracker?
+    private var insightsController: InsightsWindowController?
+
+    var isActivityTracking: Bool {
+        activityTracker?.isTracking ?? false
+    }
+
     func start() {
         guard !started else { return }
         started = true
@@ -31,6 +39,54 @@ final class AppModel {
                 Task { @MainActor in self?.store.hrFailed(message) }
             })
         Task { await updateChecker.checkIfDue() }
+
+        Task {
+            do {
+                let actStore = try await ActivityStore()
+                self.activityStore = actStore
+                self.activityTracker = ActivityTracker(store: actStore, healthStore: self.store)
+                self.insightsController = InsightsWindowController(store: actStore)
+
+                if UserDefaults.standard.bool(forKey: "activityTrackingEnabled") {
+                    self.activityTracker?.start()
+                }
+
+                NotificationCenter.default.addObserver(
+                    forName: UserDefaults.didChangeNotification,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in self?.updateTrackingState() }
+                }
+
+                NotificationCenter.default.addObserver(
+                    forName: .openInsightsWindow,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor in self?.insightsController?.showWindow() }
+                }
+
+                NotificationCenter.default.addObserver(
+                    forName: .deleteActivityData,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { await self?.activityStore?.deleteAll() }
+                }
+            } catch {
+                print("Failed to initialize ActivityStore: \(error)")
+            }
+        }
+    }
+
+    private func updateTrackingState() {
+        let enabled = UserDefaults.standard.bool(forKey: "activityTrackingEnabled")
+        if enabled && !(activityTracker?.isTracking ?? false) {
+            activityTracker?.start()
+        } else if !enabled && (activityTracker?.isTracking ?? false) {
+            activityTracker?.stop()
+        }
     }
 
     private func handle(bpm: Int) {
